@@ -9,6 +9,9 @@ export type VideoEntry = {
   id: string;
   title: string;
   url: string;
+  sourceType?: "youtube" | "local";
+  localVideoId?: string;
+  localFileName?: string;
   timestamps: Timestamp[];
 };
 

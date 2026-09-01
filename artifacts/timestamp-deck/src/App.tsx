@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Film,
+  FileVideo,
   LayoutList,
   Moon,
   Plus,
@@ -18,6 +19,7 @@ import { TimestampPanel } from "./components/TimestampPanel";
 import { GlobalTimeline } from "./components/GlobalTimeline";
 import { ImportModal } from "./components/ImportModal";
 import { ExportPanel } from "./components/ExportPanel";
+import { saveLocalVideo } from "./utils/localVideoStorage";
 
 const createEmptyProject = (): Project => ({
   id: "proj-1",
@@ -40,8 +42,12 @@ export function App() {
     }
   });
   const [searchQuery, setSearchQuery] = useState("");
+  const [newVideoType, setNewVideoType] = useState<"youtube" | "local">("youtube");
   const [newVideoUrl, setNewVideoUrl] = useState("");
   const [newVideoTitle, setNewVideoTitle] = useState("");
+  const [newVideoFile, setNewVideoFile] = useState<File | null>(null);
+  const [newVideoError, setNewVideoError] = useState<string | null>(null);
+  const [isSavingVideo, setIsSavingVideo] = useState(false);
   const playerRef = useRef<PlayerRef | null>(null);
 
   useEffect(() => {
@@ -72,20 +78,53 @@ export function App() {
     }));
   };
 
-  const submitNewVideo = () => {
-    const url = newVideoUrl.trim();
-    if (!url) return;
-    const newVideo: VideoEntry = {
-      id: `vid-${Date.now()}`,
-      title: newVideoTitle.trim() || "Untitled video",
-      url,
-      timestamps: [],
-    };
-    setProject((current) => ({ ...current, videos: [...current.videos, newVideo] }));
-    setActiveVideoId(newVideo.id);
-    setNewVideoUrl("");
-    setNewVideoTitle("");
-    setIsAddVideoOpen(false);
+  const submitNewVideo = async () => {
+    setNewVideoError(null);
+    if (newVideoType === "youtube") {
+      const url = newVideoUrl.trim();
+      if (!url) return;
+      const newVideo: VideoEntry = {
+        id: `vid-${Date.now()}`,
+        title: newVideoTitle.trim() || "Untitled video",
+        url,
+        sourceType: "youtube",
+        timestamps: [],
+      };
+      setProject((current) => ({ ...current, videos: [...current.videos, newVideo] }));
+      setActiveVideoId(newVideo.id);
+      setNewVideoUrl("");
+      setNewVideoTitle("");
+      setIsAddVideoOpen(false);
+      return;
+    }
+
+    if (!newVideoFile) {
+      setNewVideoError("Choose a video file first.");
+      return;
+    }
+
+    setIsSavingVideo(true);
+    try {
+      const localVideoId = await saveLocalVideo(newVideoFile);
+      const newVideo: VideoEntry = {
+        id: `vid-${Date.now()}`,
+        title: newVideoTitle.trim() || newVideoFile.name.replace(/\.[^/.]+$/, "") || "Untitled video",
+        url: "",
+        sourceType: "local",
+        localVideoId,
+        localFileName: newVideoFile.name,
+        timestamps: [],
+      };
+      setProject((current) => ({ ...current, videos: [...current.videos, newVideo] }));
+      setActiveVideoId(newVideo.id);
+      setNewVideoFile(null);
+      setNewVideoTitle("");
+      setIsAddVideoOpen(false);
+    } catch (error: unknown) {
+      setNewVideoError(error instanceof Error ? error.message : "Could not save this local video.");
+    } finally {
+      setIsSavingVideo(false);
+    }
   };
 
   const jumpToTimestamp = (videoId: string, seconds: number) => {
@@ -179,7 +218,7 @@ export function App() {
                     <span className="video-number">{(index + 1).toString().padStart(2, "0")}</span>
                     <span>
                       <span className="video-title">{video.title}</span>
-                      <span className="video-subtitle">{video.timestamps.length} {video.timestamps.length === 1 ? "mark" : "marks"}</span>
+                       <span className="video-subtitle">{video.sourceType === "local" ? "Local file · " : ""}{video.timestamps.length} {video.timestamps.length === 1 ? "mark" : "marks"}</span>
                     </span>
                   </button>
                 </li>
@@ -233,7 +272,7 @@ export function App() {
                 <div>
                   <div className="empty-state-icon"><Film size={20} /></div>
                   <h3>Your desk is clear.</h3>
-                  <p>Bring in a YouTube video and start collecting the moments worth returning to.</p>
+                   <p>Bring in a YouTube video or a local file and start collecting the moments worth returning to.</p>
                   <button className="button button-accent" onClick={() => setIsAddVideoOpen(true)} data-testid="button-empty-add-video">
                     <Plus size={16} /> Add your first video
                   </button>
@@ -254,18 +293,31 @@ export function App() {
               </div>
               <button className="icon-button" onClick={() => setIsAddVideoOpen(false)} data-testid="button-close-add-video" aria-label="Close add video dialog"><X size={18} /></button>
             </div>
-            <p className="modal-lede">Paste a YouTube link. Give it a name you will recognize when you return in a week.</p>
-            <div className="field">
-              <label htmlFor="video-url">YouTube URL</label>
-              <input id="video-url" value={newVideoUrl} onChange={(event) => setNewVideoUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..." autoFocus data-testid="input-video-url" onKeyDown={(event) => { if (event.key === "Enter") submitNewVideo(); }} />
+            <p className="modal-lede">Choose a YouTube link or keep a local video on this device. Your local file is stored in this browser and is not uploaded.</p>
+            <div className="source-toggle" role="group" aria-label="Video source">
+              <button className={`source-option ${newVideoType === "youtube" ? "active" : ""}`} onClick={() => { setNewVideoType("youtube"); setNewVideoError(null); }} type="button" aria-pressed={newVideoType === "youtube"}><Film size={15} /> YouTube</button>
+              <button className={`source-option ${newVideoType === "local" ? "active" : ""}`} onClick={() => { setNewVideoType("local"); setNewVideoError(null); }} type="button" aria-pressed={newVideoType === "local"}><FileVideo size={15} /> Local file</button>
             </div>
+            {newVideoType === "youtube" ? (
+              <div className="field">
+                <label htmlFor="video-url">YouTube URL</label>
+                <input id="video-url" value={newVideoUrl} onChange={(event) => setNewVideoUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..." autoFocus data-testid="input-video-url" onKeyDown={(event) => { if (event.key === "Enter") void submitNewVideo(); }} />
+              </div>
+            ) : (
+              <div className="field">
+                <label htmlFor="video-file">Video file</label>
+                <input id="video-file" type="file" accept="video/*" onChange={(event) => { setNewVideoFile(event.target.files?.[0] ?? null); setNewVideoError(null); }} data-testid="input-video-file" />
+                <span className="field-help">{newVideoFile ? newVideoFile.name : "MP4, WebM, MOV, and other browser-supported formats."}</span>
+              </div>
+            )}
             <div className="field">
               <label htmlFor="video-title">Title <span style={{ opacity: .65 }}>(optional)</span></label>
               <input id="video-title" value={newVideoTitle} onChange={(event) => setNewVideoTitle(event.target.value)} placeholder="e.g. The shape of a good argument" data-testid="input-video-title" />
             </div>
+            {newVideoError && <div className="error" role="alert" data-testid="status-add-video-error">{newVideoError}</div>}
             <div className="modal-actions">
-              <button className="button button-ghost" onClick={() => setIsAddVideoOpen(false)} data-testid="button-cancel-add-video">Cancel</button>
-              <button className="button button-accent" onClick={submitNewVideo} disabled={!newVideoUrl.trim()} data-testid="button-submit-add-video"><Plus size={16} /> Add to shelf</button>
+              <button className="button button-ghost" onClick={() => setIsAddVideoOpen(false)} disabled={isSavingVideo} data-testid="button-cancel-add-video">Cancel</button>
+              <button className="button button-accent" onClick={() => void submitNewVideo()} disabled={isSavingVideo || (newVideoType === "youtube" ? !newVideoUrl.trim() : !newVideoFile)} data-testid="button-submit-add-video">{isSavingVideo ? "Saving..." : <><Plus size={16} /> Add to shelf</>}</button>
             </div>
           </div>
         </div>

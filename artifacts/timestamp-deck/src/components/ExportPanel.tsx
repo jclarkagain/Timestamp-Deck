@@ -32,8 +32,10 @@ export function ExportPanel({ project, secureMode }: Props) {
     if (!confirmUnsafeExport()) return;
     const lines: string[] = [];
     for (const video of project.videos) {
-      lines.push(`Video: ${video.title}`, `URL: ${video.url}`);
-      for (const timestamp of video.timestamps) lines.push(`  - ${timestamp.timeSeconds}s — ${timestamp.label}`);
+      lines.push(`Video: ${video.title}`, video.sourceType === "local"
+        ? `File: ${video.localFileName ?? "Local video"} (stored on this device)`
+        : `URL: ${video.url}`);
+      for (const timestamp of video.timestamps) lines.push(`  - ${formatExportTime(timestamp.timeSeconds)} — ${timestamp.label}`);
       lines.push("");
     }
     try {
@@ -77,4 +79,13 @@ export function ExportPanel({ project, secureMode }: Props) {
       <EncryptModal isOpen={pendingAction !== null} title="Set an encryption password" onConfirm={handleEncryptConfirm} onClose={() => setPendingAction(null)} />
     </div>
   );
+}
+
+function formatExportTime(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const s = safeSeconds % 60;
+  const m = Math.floor((safeSeconds / 60) % 60);
+  const h = Math.floor(safeSeconds / 3600);
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }

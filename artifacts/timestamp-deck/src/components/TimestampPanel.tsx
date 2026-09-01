@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, FileText, GripVertical, Pencil, Play, Plus, ScanLine, Trash2, X } from "lucide-react";
+import { Check, Clock3, FileText, GripVertical, Pencil, Play, Plus, ScanLine, Trash2, X } from "lucide-react";
 import type { Timestamp, VideoEntry } from "../types";
 import { TimestampNotesModal } from "./TimestampNotesModal";
 
@@ -19,18 +19,43 @@ const formatTime = (seconds: number): string => {
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 };
 
+export function parseTimestamp(value: string): number | null {
+  const input = value.trim();
+  if (!input) return null;
+
+  if (!input.includes(":")) {
+    const seconds = Number(input);
+    return Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
+  }
+
+  const parts = input.split(":");
+  if (parts.length !== 2 && parts.length !== 3) return null;
+  if (parts.some((part) => !/^\d+(?:\.\d+)?$/.test(part))) return null;
+
+  const numbers = parts.map(Number);
+  const seconds = numbers[numbers.length - 1];
+  const minutes = numbers[numbers.length - 2];
+  if (seconds >= 60 || minutes >= 60) return null;
+
+  return parts.length === 3
+    ? numbers[0] * 3600 + minutes * 60 + seconds
+    : minutes * 60 + seconds;
+}
+
 export function TimestampPanel({ video, onChange, onSeek, onCapture }: Props) {
   const [editingNotes, setEditingNotes] = useState<Timestamp | null>(null);
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
+  const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
+  const [editingTime, setEditingTime] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const addTimestampManual = () => {
-    const input = window.prompt("Enter time in seconds:");
+    const input = window.prompt("Enter time (MM:SS, HH:MM:SS, or seconds):");
     if (input === null || !input.trim()) return;
-    const timeSeconds = Number(input);
-    if (!Number.isFinite(timeSeconds) || timeSeconds < 0) {
-      window.alert("Enter a positive number of seconds.");
+    const timeSeconds = parseTimestamp(input);
+    if (timeSeconds === null) {
+      window.alert("Use MM:SS, HH:MM:SS, or a number of seconds.");
       return;
     }
     const label = window.prompt("Label for this timestamp?") ?? "";
@@ -60,6 +85,22 @@ export function TimestampPanel({ video, onChange, onSeek, onCapture }: Props) {
   const beginLabelEdit = (timestamp: Timestamp) => {
     setEditingLabelId(timestamp.id);
     setEditingLabel(timestamp.label);
+  };
+
+  const beginTimeEdit = (timestamp: Timestamp) => {
+    setEditingTimeId(timestamp.id);
+    setEditingTime(formatTime(timestamp.timeSeconds));
+  };
+
+  const commitTimeEdit = () => {
+    if (!editingTimeId) return;
+    const timeSeconds = parseTimestamp(editingTime);
+    if (timeSeconds === null) {
+      window.alert("Use MM:SS, HH:MM:SS, or a number of seconds.");
+      return;
+    }
+    updateTimestamp(editingTimeId, { timeSeconds });
+    setEditingTimeId(null);
   };
 
   const commitLabelEdit = () => {
@@ -131,7 +172,15 @@ export function TimestampPanel({ video, onChange, onSeek, onCapture }: Props) {
             >
               <div className="drag-handle" title="Drag to reorder" aria-label="Drag to reorder"><GripVertical size={18} /></div>
               <div className="timestamp-main">
-                <button className="timestamp-time mono" onClick={() => onSeek?.(timestamp.timeSeconds)} data-testid={`button-seek-timestamp-${timestamp.id}`} title="Jump to this moment">{formatTime(timestamp.timeSeconds)}</button>
+                {editingTimeId === timestamp.id ? (
+                  <div className="edit-time">
+                    <input value={editingTime} onChange={(event) => setEditingTime(event.target.value)} autoFocus aria-label="Timestamp time" data-testid={`input-edit-time-${timestamp.id}`} onKeyDown={(event) => { if (event.key === "Enter") commitTimeEdit(); if (event.key === "Escape") setEditingTimeId(null); }} />
+                    <button className="icon-button" onClick={commitTimeEdit} data-testid={`button-save-time-${timestamp.id}`} aria-label="Save timestamp time"><Check size={15} /></button>
+                    <button className="icon-button" onClick={() => setEditingTimeId(null)} data-testid={`button-cancel-time-${timestamp.id}`} aria-label="Cancel timestamp time"><X size={15} /></button>
+                  </div>
+                ) : (
+                  <button className="timestamp-time mono" onClick={() => onSeek?.(timestamp.timeSeconds)} data-testid={`button-seek-timestamp-${timestamp.id}`} title="Jump to this moment">{formatTime(timestamp.timeSeconds)}</button>
+                )}
                 {editingLabelId === timestamp.id ? (
                   <div className="edit-label">
                     <input value={editingLabel} onChange={(event) => setEditingLabel(event.target.value)} autoFocus data-testid={`input-edit-label-${timestamp.id}`} onKeyDown={(event) => { if (event.key === "Enter") commitLabelEdit(); if (event.key === "Escape") setEditingLabelId(null); }} />
@@ -145,6 +194,7 @@ export function TimestampPanel({ video, onChange, onSeek, onCapture }: Props) {
               </div>
               <div className="timestamp-controls">
                 <button className="icon-button" onClick={() => onSeek?.(timestamp.timeSeconds)} data-testid={`button-jump-timestamp-${timestamp.id}`} aria-label="Jump to timestamp"><Play size={15} /></button>
+                <button className="icon-button" onClick={() => beginTimeEdit(timestamp)} data-testid={`button-edit-time-${timestamp.id}`} aria-label="Edit timestamp time"><Clock3 size={15} /></button>
                 <button className="icon-button" onClick={() => beginLabelEdit(timestamp)} data-testid={`button-edit-label-${timestamp.id}`} aria-label="Edit label"><Pencil size={15} /></button>
                 <button className="icon-button" onClick={() => setEditingNotes(timestamp)} data-testid={`button-edit-notes-${timestamp.id}`} aria-label="Edit notes"><FileText size={15} /></button>
                 <button className="icon-button icon-button-danger" onClick={() => deleteTimestamp(timestamp.id)} data-testid={`button-delete-timestamp-${timestamp.id}`} aria-label="Delete timestamp"><Trash2 size={15} /></button>
