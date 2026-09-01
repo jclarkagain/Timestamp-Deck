@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Timestamp Deck"
+description = "A focused video timestamping workspace for organizing notes, markers, and encrypted project exports while reviewing YouTube videos."
+version = "1.0.0"
+id = "artifacts/timestamp-deck"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19342
+
+[services.development]
+run = "pnpm --filter @workspace/timestamp-deck run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/timestamp-deck", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/timestamp-deck/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19342"
+BASE_PATH = "/"
