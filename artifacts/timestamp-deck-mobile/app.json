@@ -7,11 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "timestamp-deck-mobile",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "backgroundColor": "#f4efe5",
-      "image": "./assets/images/icon.png",
-      "resizeMode": "contain"
-    },
     "ios": {
       "supportsTablet": false
     },
