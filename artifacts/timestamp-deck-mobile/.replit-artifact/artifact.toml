@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/timestamp-deck-mobile/"
+title = "Timestamp Deck Mobile"
+description = "An Android companion app for organizing YouTube and local video timestamps, notes, and encrypted project exports on the go."
+version = "1.0.0"
+id = "artifacts/timestamp-deck-mobile"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/timestamp-deck-mobile/" ]
+localPort = 18343
+
+[services.development]
+run = "pnpm --filter @workspace/timestamp-deck-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/timestamp-deck-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/timestamp-deck-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "18343"
+BASE_PATH = "/timestamp-deck-mobile/"
